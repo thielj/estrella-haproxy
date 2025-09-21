@@ -1,23 +1,22 @@
-#!/bin/sh
+#!/bin/bash
 
 # Minimal supervisord replacement using shell scripts
 # This provides basic process management functionality
 
-CONFIG_FILE="/etc/supervisor/conf.d/supervisord.conf"
-LOG_DIR="/var/log/supervisor"
-PID_FILE="/var/run/supervisord.pid"
+PID_FILE="${_VAR_DIR}/supervisord.pid"
+HAPROXY_OPTS=(-W -S "${HAPROXY_SOCKET}" "$@")
 
 # Store PIDs of managed processes
 PROCESS_PIDS=""
 
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] supervisord: $1" | tee -a "$LOG_DIR/supervisord.log"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] supervisord: $1" | tee -a "$_LOG_DIR/supervisord.log"
 }
 
 # Function to start HAProxy
 start_haproxy() {
     log "Starting HAProxy..."
-    haproxy -f /usr/local/etc/haproxy/haproxy.cfg -W -S /var/run/haproxy/admin.sock > "$LOG_DIR/haproxy.log" 2> "$LOG_DIR/haproxy_error.log" &
+    haproxy "${HAPROXY_OPTS[@]}" > "$_LOG_DIR/haproxy.log" 2> "$_LOG_DIR/haproxy_error.log" &
     HAPROXY_PID=$!
     PROCESS_PIDS="$PROCESS_PIDS $HAPROXY_PID"
     log "HAProxy started with PID $HAPROXY_PID"
@@ -25,12 +24,12 @@ start_haproxy() {
 
 # Function to start scripts
 start_scripts() {
-    if [ -d "/usr/local/bin/scripts" ]; then
-        for script in /usr/local/bin/scripts/*.sh; do
+    if [ -d "${_ETC_DIR}/scripts.d" ]; then
+        for script in "${_ETC_DIR}/scripts.d"/*.sh; do
             if [ -x "$script" ]; then
                 script_name=$(basename "$script" .sh)
                 log "Starting script: $script_name"
-                "$script" > "$LOG_DIR/${script_name}.log" 2> "$LOG_DIR/${script_name}_error.log" &
+                "$script" > "$_LOG_DIR/${script_name}.log" 2> "$_LOG_DIR/${script_name}_error.log" &
                 script_pid=$!
                 PROCESS_PIDS="$PROCESS_PIDS $script_pid"
                 log "Script $script_name started with PID $script_pid"
@@ -48,10 +47,10 @@ stop_all() {
             kill "$pid" 2>/dev/null || true
         fi
     done
-    
+
     # Wait for processes to stop
-    sleep 2
-    
+    sleep 5
+
     # Force kill if still running
     for pid in $PROCESS_PIDS; do
         if kill -0 "$pid" 2>/dev/null; then
@@ -59,9 +58,8 @@ stop_all() {
             kill -9 "$pid" 2>/dev/null || true
         fi
     done
-    
+
     rm -f "$PID_FILE"
-    exit 0
 }
 
 # Function to check and restart failed processes
@@ -83,6 +81,7 @@ check_processes() {
 
 # Function to start all services
 start_all() {
+    echo $$ > "$PID_FILE"
     start_haproxy
     start_scripts
 }
@@ -91,8 +90,7 @@ start_all() {
 trap stop_all TERM INT USR1
 
 # Main execution
-mkdir -p "$LOG_DIR"
-echo $$ > "$PID_FILE"
+mkdir -p "$_LOG_DIR"
 
 log "Starting minimal supervisord..."
 start_all

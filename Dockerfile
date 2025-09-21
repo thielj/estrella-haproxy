@@ -1,35 +1,34 @@
 FROM haproxy:2.8-alpine
 
-# Switch to root for setup
+ENV _VAR_DIR="/var/lib/haproxy" \
+    _ETC_DIR="/usr/local/etc/haproxy"
+ENV _LOG_DIR="${_VAR_DIR}/log" \
+    HAPROXY_SOCKET="${_VAR_DIR}/haproxy.sock"
+
 USER root
+COPY bin/* /usr/local/bin/
+RUN set -eux; \
+	\
+    chmod +x /usr/local/bin/*; \
+    mkdir "${_ETC_DIR}/services.d" "${_ETC_DIR}/scripts.d"; \
+    apk add --no-cache \
+        bash \
+        curl \
+		socat \
+        redis \
+	;
 
-# Create necessary directories without downloading packages
-RUN mkdir -p /var/log/supervisor \
-    && mkdir -p /etc/supervisor/conf.d \
-    && mkdir -p /usr/local/bin/scripts \
-    && mkdir -p /var/run/haproxy
+USER haproxy
+WORKDIR ${_VAR_DIR}
+RUN mkdir ${_LOG_DIR} && \
+    touch ${_LOG_DIR}/haproxy.log && \
+    touch ${_LOG_DIR}/haproxy_error.log && \
+    touch ${_LOG_DIR}/supervisord.log && \
+    touch ${_LOG_DIR}/supervisord_error.log
 
-# Install minimal supervisor manually (Python-based)
-# Create a simple supervisord replacement using shell scripts
-COPY minimal-supervisord.sh /usr/local/bin/supervisord
-COPY simple-socat.sh /usr/local/bin/simple-socat.sh
-RUN chmod +x /usr/local/bin/supervisord /usr/local/bin/simple-socat.sh
-
-# Copy supervisord configuration
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-COPY haproxy-supervisord.conf /etc/supervisor/conf.d/haproxy.conf
-
-# Copy entrypoint script
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# Copy example scripts
-COPY scripts/ /usr/local/bin/scripts/
-RUN chmod +x /usr/local/bin/scripts/*.sh
-
-# Expose HAProxy ports
-EXPOSE 80 443 8404
+## Expose HAProxy ports
+#EXPOSE 8404
 
 # Use our custom entrypoint
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+CMD ["supervisord", "-f", "/usr/local/etc/haproxy/haproxy.cfg", "-f", "/usr/local/etc/haproxy/services.d"]

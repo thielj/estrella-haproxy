@@ -3,7 +3,6 @@
 # Example redis-master-watcher.sh script
 # This script monitors Redis masters and communicates with HAProxy through the admin socket
 
-HAPROXY_SOCKET="/var/run/haproxy/admin.sock"
 CHECK_INTERVAL=${CHECK_INTERVAL:-10}
 REDIS_HOSTS=${REDIS_HOSTS:-"redis1:6379 redis2:6379 redis3:6379"}
 SOCAT_TOOL="/usr/local/bin/simple-socat.sh"
@@ -15,7 +14,7 @@ log() {
 check_redis_master() {
     local host=$1
     local port=$2
-    
+
     # Check if Redis is a master (simplified check using nc if available)
     if command -v nc >/dev/null 2>&1; then
         if timeout 3 sh -c "echo 'INFO replication' | nc $host $port" 2>/dev/null | grep -q "role:master"; then
@@ -32,7 +31,7 @@ check_redis_master() {
 update_haproxy_backend() {
     local action=$1  # enable or disable
     local server=$2
-    
+
     if [ -S "$HAPROXY_SOCKET" ]; then
         if [ -x "$SOCAT_TOOL" ]; then
             "$SOCAT_TOOL" "$action server redis-backend/$server" "$HAPROXY_SOCKET"
@@ -54,7 +53,7 @@ while true; do
         host=$(echo $host_port | cut -d: -f1)
         port=$(echo $host_port | cut -d: -f2)
         server_name="$host"
-        
+
         if check_redis_master "$host" "$port"; then
             log "Redis $host:$port is master - enabling in HAProxy"
             update_haproxy_backend "enable" "$server_name"
@@ -63,6 +62,6 @@ while true; do
             update_haproxy_backend "disable" "$server_name"
         fi
     done
-    
+
     sleep $CHECK_INTERVAL
 done

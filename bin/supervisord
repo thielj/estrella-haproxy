@@ -4,7 +4,6 @@
 # This provides basic process management functionality
 
 PID_FILE="${_VAR_DIR}/supervisord.pid"
-HAPROXY_OPTS=(-W -S "${HAPROXY_SOCKET}" "$@")
 
 # Store PIDs of managed processes
 PROCESS_PIDS=""
@@ -17,6 +16,7 @@ log() {
 
 # Function to start scripts
 start_scripts() {
+    if [ "$TERMINATING" -eq 1 ]; then return; fi
     PROCESS_PIDS=""
     if [ -d "${_ETC_DIR}/scripts.d" ]; then
         for script in "${_ETC_DIR}/scripts.d"/*.sh; do
@@ -34,7 +34,6 @@ start_scripts() {
 
 # Function to stop all processes
 stop_all() {
-    log "Stopping all processes..."
 
     for pid in $PROCESS_PIDS; do
         if kill -0 "$pid" 2>/dev/null; then
@@ -44,7 +43,7 @@ stop_all() {
     done
 
     # Wait for processes to stop
-    sleep 5
+    sleep 2
 
     for pid in $PROCESS_PIDS; do
         if kill -0 "$pid" 2>/dev/null; then
@@ -52,8 +51,6 @@ stop_all() {
             kill -9 "$pid" 2>/dev/null || true
         fi
     done
-
-    rm -f "$PID_FILE"
 }
 
 # Function to check and restart failed processes
@@ -63,10 +60,10 @@ check_processes() {
             # Process is running
             continue
         else
-            log "Process $pid has died, restarting services..."
-            # For simplicity, restart all services
+            log "Process $pid has died, restarting all scripts..."
+            # For simplicity, restart all scripts
             stop_all
-            if [ "$TERMINATING" -eq 0 ]; then start_all; fi
+            start_scripts
             return
         fi
     done
@@ -76,6 +73,7 @@ termination_handler() {
     TERMINATING=1
     PROCESS_PIDS="$PROCESS_PIDS $HAPROXY_PID"
     stop_all
+    rm -f "$PID_FILE"
     exit 0
 }
 
@@ -87,8 +85,6 @@ shutdown_handler() {
         log "Sending HAProxy graceful shutdown signal"
         kill -USR1 "$HAPROXY_PID" 2>/dev/null || true
     fi
-
-    termination_handler
 }
 
 # Signal handlers
@@ -98,18 +94,25 @@ trap 'shutdown_handler' USR1 INT
 log "Starting minimal supervisord..."
 echo $$ > "$PID_FILE"
 
+
+# Run HAProxy in foreground
+log "Starting HAProxy..."
+haproxy -W -S "${HAPROXY_SOCKET}" "$@" &
+HAPROXY_PID=$!
+log "HAProxy started with PID $HAPROXY_PID"
+
+sleep 2
+start_scripts
+
 # Start scripts and check processes in the background
-( sleep 10; start_scripts; while true; do
+( 
+  sleep 5; 
+  start_scripts;
+  while true; do
     sleep 10
     if [ "$TERMINATING" -eq 1 ]; then break; fi
     check_processes
 done ) &
-
-# Run HAProxy in foreground
-log "Starting HAProxy in foreground..."
-haproxy "${HAPROXY_OPTS[@]}" &
-HAPROXY_PID=$!
-log "HAProxy started with PID $HAPROXY_PID"
 
 wait $HAPROXY_PID
 HAPROXY_PID=""

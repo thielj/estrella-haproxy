@@ -29,20 +29,20 @@ set_weight() {
 adjust_weights() {
     local backend="$1"
     local srv_pattern="$2"
-    
+
     echo "Adjusting weights for $backend/$srv_pattern set"
 
-    # Get stats and filter for the backend and servers matching pattern, status UP
+    # Get stats and filter for the backend and servers matching srv_pattern, status UP
     local stats
-    stats=$(get_stats | awk -F',' '$1 == "'$backend'" && $2 ~ /^'$srv_pattern'[0-9]+$/ && $18 == "UP" {print $2","$60}')
+    stats=$(get_stats | awk -F',' '$1 == "'$backend'" && $2 ~ /^'$srv_pattern'[0-9]+$/ && $18 == "UP" {print $2","$39}')
 
     # Parse servers
     local servers=()
-    while IFS=',' read -r svname rtime; do
-        servers+=("$svname:$rtime")
+    while IFS=',' read -r svname check_duration; do
+        servers+=("$svname:$check_duration")
     done <<< "$stats"
 
-    # Sort by rtime (latency), ascending
+    # Sort by check_duration (last health check time, latency), ascending, numeically
     mapfile -t sorted < <(printf '%s\n' "${servers[@]}" | sort -t: -k2 -n)
 
     local num_servers=${#sorted[@]}
@@ -66,6 +66,9 @@ adjust_weights() {
 
 # Main loop
 while true; do
+
+    sleep 60  # Adjust every minute
+
     # Process each LATENCY_PROXY_SET (up to 10 for safety)
     for i in $(seq 0 10); do
         backend_var="LATENCY_PROXY_SET$i"
@@ -77,5 +80,4 @@ while true; do
         fi
     done
 
-    sleep 60  # Adjust every minute
 done

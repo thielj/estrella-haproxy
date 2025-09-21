@@ -5,8 +5,8 @@
 
 #REDIS_PASSWORD=
 #REDIS_SENTINEL_GROUP=
-BACKEND="redis-master"
-SERVER="master"
+#REDIS_MASTER_BACKEND_SET=
+#REDIS_MASTER_BACKEND_SRV=
 
 #SOCKET="${HAPROXY_SOCKET:-/var/lib/haproxy/haproxy.sock}"
 SOCKET_HOST="127.0.0.1"
@@ -37,12 +37,12 @@ get_master_addr() {
 # Function to update HAProxy server address
 update_haproxy_server() {
     local addr="$1"
-    echo "set server $BACKEND/$SERVER addr $addr" \
+    echo "set server $REDIS_MASTER_BACKEND_SET/$REDIS_MASTER_BACKEND_SRV addr $addr" \
         | nc -q1 "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
     if [ $? -eq 0 ]; then
-        echo "Updated $BACKEND/$SERVER to $addr"
+        echo "Updated $REDIS_MASTER_BACKEND_SET/$REDIS_MASTER_BACKEND_SRV to $addr"
     else
-        echo "Failed to update $BACKEND/$SERVER"
+        echo "Failed to update $REDIS_MASTER_BACKEND_SET/$REDIS_MASTER_BACKEND_SRV"
     fi
 }
 

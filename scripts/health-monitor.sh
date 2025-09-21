@@ -1,18 +1,19 @@
-#!/bin/bash
+#!/bin/sh
 
 # Example health-monitor.sh script
 # This script monitors backend health and logs status through HAProxy admin socket
 
 HAPROXY_SOCKET="/var/run/haproxy/admin.sock"
 CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-30}
+SOCAT_TOOL="/usr/local/bin/simple-socat.sh"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] health-monitor: $1"
 }
 
 get_haproxy_stats() {
-    if [ -S "$HAPROXY_SOCKET" ]; then
-        echo "show stat" | socat - "UNIX-CONNECT:$HAPROXY_SOCKET" 2>/dev/null
+    if [ -S "$HAPROXY_SOCKET" ] && [ -x "$SOCAT_TOOL" ]; then
+        "$SOCAT_TOOL" "show stat" "$HAPROXY_SOCKET" 2>/dev/null
     fi
 }
 

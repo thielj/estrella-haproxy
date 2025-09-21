@@ -1,17 +1,19 @@
 FROM haproxy:2.8-alpine
 
-# Switch to root for package installation
+# Switch to root for setup
 USER root
 
-# Install supervisord and other required packages
-RUN apk update && apk add --no-cache \
-    py3-supervisor \
-    bash \
-    curl \
-    socat \
-    && mkdir -p /var/log/supervisor \
+# Create necessary directories without downloading packages
+RUN mkdir -p /var/log/supervisor \
     && mkdir -p /etc/supervisor/conf.d \
-    && mkdir -p /usr/local/bin/scripts
+    && mkdir -p /usr/local/bin/scripts \
+    && mkdir -p /var/run/haproxy
+
+# Install minimal supervisor manually (Python-based)
+# Create a simple supervisord replacement using shell scripts
+COPY minimal-supervisord.sh /usr/local/bin/supervisord
+COPY simple-socat.sh /usr/local/bin/simple-socat.sh
+RUN chmod +x /usr/local/bin/supervisord /usr/local/bin/simple-socat.sh
 
 # Copy supervisord configuration
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
@@ -24,9 +26,6 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # Copy example scripts
 COPY scripts/ /usr/local/bin/scripts/
 RUN chmod +x /usr/local/bin/scripts/*.sh
-
-# Create the socket directory for HAProxy admin socket
-RUN mkdir -p /var/run/haproxy
 
 # Expose HAProxy ports
 EXPOSE 80 443 8404

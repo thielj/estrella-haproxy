@@ -1,0 +1,104 @@
+#!/bin/sh
+
+# Minimal supervisord replacement using shell scripts
+# This provides basic process management functionality
+
+CONFIG_FILE="/etc/supervisor/conf.d/supervisord.conf"
+LOG_DIR="/var/log/supervisor"
+PID_FILE="/var/run/supervisord.pid"
+
+# Store PIDs of managed processes
+PROCESS_PIDS=""
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] supervisord: $1" | tee -a "$LOG_DIR/supervisord.log"
+}
+
+# Function to start HAProxy
+start_haproxy() {
+    log "Starting HAProxy..."
+    haproxy -f /usr/local/etc/haproxy/haproxy.cfg -W -S /var/run/haproxy/admin.sock > "$LOG_DIR/haproxy.log" 2> "$LOG_DIR/haproxy_error.log" &
+    HAPROXY_PID=$!
+    PROCESS_PIDS="$PROCESS_PIDS $HAPROXY_PID"
+    log "HAProxy started with PID $HAPROXY_PID"
+}
+
+# Function to start scripts
+start_scripts() {
+    if [ -d "/usr/local/bin/scripts" ]; then
+        for script in /usr/local/bin/scripts/*.sh; do
+            if [ -x "$script" ]; then
+                script_name=$(basename "$script" .sh)
+                log "Starting script: $script_name"
+                "$script" > "$LOG_DIR/${script_name}.log" 2> "$LOG_DIR/${script_name}_error.log" &
+                script_pid=$!
+                PROCESS_PIDS="$PROCESS_PIDS $script_pid"
+                log "Script $script_name started with PID $script_pid"
+            fi
+        done
+    fi
+}
+
+# Function to stop all processes
+stop_all() {
+    log "Stopping all processes..."
+    for pid in $PROCESS_PIDS; do
+        if kill -0 "$pid" 2>/dev/null; then
+            log "Stopping process $pid"
+            kill "$pid" 2>/dev/null || true
+        fi
+    done
+    
+    # Wait for processes to stop
+    sleep 2
+    
+    # Force kill if still running
+    for pid in $PROCESS_PIDS; do
+        if kill -0 "$pid" 2>/dev/null; then
+            log "Force killing process $pid"
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    done
+    
+    rm -f "$PID_FILE"
+    exit 0
+}
+
+# Function to check and restart failed processes
+check_processes() {
+    new_pids=""
+    for pid in $PROCESS_PIDS; do
+        if kill -0 "$pid" 2>/dev/null; then
+            new_pids="$new_pids $pid"
+        else
+            log "Process $pid has died, restarting services..."
+            # For simplicity, restart all services
+            stop_all
+            start_all
+            return
+        fi
+    done
+    PROCESS_PIDS="$new_pids"
+}
+
+# Function to start all services
+start_all() {
+    start_haproxy
+    start_scripts
+}
+
+# Signal handlers
+trap stop_all TERM INT USR1
+
+# Main execution
+mkdir -p "$LOG_DIR"
+echo $$ > "$PID_FILE"
+
+log "Starting minimal supervisord..."
+start_all
+
+# Main loop
+while true; do
+    sleep 10
+    check_processes
+done

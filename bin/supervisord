@@ -74,7 +74,6 @@ termination_handler() {
     PROCESS_PIDS="$PROCESS_PIDS $HAPROXY_PID"
     stop_all
     rm -f "$PID_FILE"
-    exit 0
 }
 
 # shellcheck disable=SC2329
@@ -88,7 +87,7 @@ shutdown_handler() {
 }
 
 # Signal handlers
-trap 'termination_handler' TERM
+trap 'termination_handler; exit 143' TERM
 trap 'shutdown_handler' USR1 INT
 
 log "Starting minimal supervisord..."
@@ -101,12 +100,9 @@ haproxy -W -S "${HAPROXY_SOCKET}" "$@" &
 HAPROXY_PID=$!
 log "HAProxy started with PID $HAPROXY_PID"
 
-sleep 2
-start_scripts
-
 # Start scripts and check processes in the background
-( 
-  sleep 5; 
+(
+  sleep 5;
   start_scripts;
   while true; do
     sleep 10
@@ -115,7 +111,9 @@ start_scripts
 done ) &
 
 wait $HAPROXY_PID
+HAPROXY_EXIT_CODE=$?
 HAPROXY_PID=""
 
 log "HAProxy has exited, stopping all scripts..."
 termination_handler
+exit $HAPROXY_EXIT_CODE

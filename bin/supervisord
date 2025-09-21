@@ -103,17 +103,20 @@ log "HAProxy started with PID $HAPROXY_PID"
 # Start scripts and check processes in the background
 (
   sleep 5;
-  start_scripts;
-  while true; do
-    sleep 10
-    if [ "$TERMINATING" -eq 1 ]; then break; fi
-    check_processes
-done ) &
+  if kill -0 "$HAPROXY_PID" 2>/dev/null; then
+    # Process is running
+    start_scripts;
+    while true; do
+        sleep 10
+        if [ "$TERMINATING" -eq 1 ]; then break; fi
+        check_processes
+    done;
+  fi ) &
 
 wait $HAPROXY_PID
-HAPROXY_EXIT_CODE=$?
-HAPROXY_PID=""
 
 log "HAProxy has exited, stopping all scripts..."
+HAPROXY_PID=""
+HAPROXY_EXIT_CODE=$?
 termination_handler
 exit $HAPROXY_EXIT_CODE

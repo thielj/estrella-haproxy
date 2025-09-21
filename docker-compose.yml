@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  haproxy:
+    build: .
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8404:8404"  # HAProxy stats
+    environment:
+      - REDIS_HOSTS=redis1:6379 redis2:6379
+      - CHECK_INTERVAL=10
+      - HEALTH_CHECK_INTERVAL=30
+    depends_on:
+      - redis1
+      - redis2
+    volumes:
+      - ./example/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+
+  redis1:
+    image: redis:alpine
+    command: redis-server --port 6379
+
+  redis2:
+    image: redis:alpine
+    command: redis-server --port 6379
+
+  # Test web servers for HAProxy to proxy to
+  web1:
+    image: nginx:alpine
+    volumes:
+      - ./example/web1.html:/usr/share/nginx/html/index.html:ro
+
+  web2:
+    image: nginx:alpine
+    volumes:
+      - ./example/web2.html:/usr/share/nginx/html/index.html:ro

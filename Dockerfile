@@ -3,8 +3,9 @@ FROM haproxy:2.8-alpine
 ENV _VAR_DIR="/var/lib/haproxy" \
     _ETC_DIR="/usr/local/etc/haproxy"
 ENV _LOG_DIR="${_VAR_DIR}/log" \
-    HAPROXY_SOCKET="${_VAR_DIR}/haproxy.sock"
-
+    HAPROXY_SOCKET="${_VAR_DIR}/haproxy.sock" \
+    HAPROXY_MASTR_SOCKET="${_VAR_DIR}/master.sock"
+    
 USER root
 COPY bin/* /usr/local/bin/
 RUN set -eux; \

@@ -7,12 +7,11 @@
 SOCKET="${HAPROXY_SOCKET:-/var/lib/haproxy/haproxy.sock}"
 #SOCKET_HOST="127.0.0.1"
 #SOCKET_PORT="9999"
-M_CLI="@1 "
 
 # Function to get HAProxy stats
 get_stats() {
-    echo "${M_CLI}show stat" | socat unix-connect:"$SOCKET" stdio 2>/dev/null
-    #echo "${M_CLI}show stat" | nc -q1 "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
+    echo "show stat" | socat unix-connect:"$SOCKET" stdio 2>/dev/null
+    #echo "show stat" | nc -q1 "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
 }
 
 # Function to set server weight
@@ -20,9 +19,9 @@ set_weight() {
     local backend="$1"
     local server="$2"
     local weight="$3"
-    echo "${M_CLI}set weight $backend/$server $weight"
-    echo "${M_CLI}set weight $backend/$server $weight" | socat unix-connect:"$SOCKET" stdio 2>/dev/null
-    #echo "${M_CLI}set weight $backend/$server $weight" | nc -q1 "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
+    echo "set weight $backend/$server $weight"
+    echo "set weight $backend/$server $weight" | socat unix-connect:"$SOCKET" stdio 2>/dev/null
+    #echo "set weight $backend/$server $weight" | nc -q1 "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
 }
 
 # Function to adjust weights for a backend

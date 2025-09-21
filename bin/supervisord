@@ -96,7 +96,8 @@ echo $$ > "$PID_FILE"
 
 # Run HAProxy in foreground
 log "Starting HAProxy..."
-haproxy -W -S "${HAPROXY_SOCKET}" "$@" &
+haproxy -W -S "${HAPROXY_MASTER_SOCKET}" "$@" &
+
 HAPROXY_PID=$!
 log "HAProxy started with PID $HAPROXY_PID"
 

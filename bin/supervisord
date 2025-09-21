@@ -8,22 +8,16 @@ HAPROXY_OPTS=(-W -S "${HAPROXY_SOCKET}" "$@")
 
 # Store PIDs of managed processes
 PROCESS_PIDS=""
+TERMINATING=0
+HAPROXY_PID=""
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] supervisord: $1" | tee -a "$_LOG_DIR/supervisord.log"
 }
 
-# Function to start HAProxy
-start_haproxy() {
-    log "Starting HAProxy..."
-    haproxy "${HAPROXY_OPTS[@]}" > "$_LOG_DIR/haproxy.log" 2> "$_LOG_DIR/haproxy_error.log" &
-    HAPROXY_PID=$!
-    PROCESS_PIDS="$PROCESS_PIDS $HAPROXY_PID"
-    log "HAProxy started with PID $HAPROXY_PID"
-}
-
 # Function to start scripts
 start_scripts() {
+    PROCESS_PIDS=""
     if [ -d "${_ETC_DIR}/scripts.d" ]; then
         for script in "${_ETC_DIR}/scripts.d"/*.sh; do
             if [ -x "$script" ]; then
@@ -41,17 +35,17 @@ start_scripts() {
 # Function to stop all processes
 stop_all() {
     log "Stopping all processes..."
+
     for pid in $PROCESS_PIDS; do
         if kill -0 "$pid" 2>/dev/null; then
             log "Stopping process $pid"
-            kill "$pid" 2>/dev/null || true
+            kill -TERM "$pid" 2>/dev/null || true
         fi
     done
 
     # Wait for processes to stop
     sleep 5
 
-    # Force kill if still running
     for pid in $PROCESS_PIDS; do
         if kill -0 "$pid" 2>/dev/null; then
             log "Force killing process $pid"
@@ -64,39 +58,61 @@ stop_all() {
 
 # Function to check and restart failed processes
 check_processes() {
-    new_pids=""
     for pid in $PROCESS_PIDS; do
         if kill -0 "$pid" 2>/dev/null; then
-            new_pids="$new_pids $pid"
+            # Process is running
+            continue
         else
             log "Process $pid has died, restarting services..."
             # For simplicity, restart all services
             stop_all
-            start_all
+            if [ "$TERMINATING" -eq 0 ]; then start_all; fi
             return
         fi
     done
-    PROCESS_PIDS="$new_pids"
 }
 
-# Function to start all services
-start_all() {
-    echo $$ > "$PID_FILE"
-    start_haproxy
-    start_scripts
+termination_handler() {
+    TERMINATING=1
+    PROCESS_PIDS="$PROCESS_PIDS $HAPROXY_PID"
+    stop_all
+    exit 0
+}
+
+# shellcheck disable=SC2329
+shutdown_handler() {
+    log "USR1 or INT signal received"
+
+    if [ -n "$HAPROXY_PID" ] && kill -0 "$HAPROXY_PID" 2>/dev/null; then
+        log "Sending HAProxy graceful shutdown signal"
+        kill -USR1 "$HAPROXY_PID" 2>/dev/null || true
+    fi
+
+    termination_handler
 }
 
 # Signal handlers
-trap stop_all TERM INT USR1
-
-# Main execution
-mkdir -p "$_LOG_DIR"
+trap 'termination_handler' TERM
+trap 'shutdown_handler' USR1 INT
 
 log "Starting minimal supervisord..."
-start_all
+echo $$ > "$PID_FILE"
 
-# Main loop
-while true; do
+# Start scripts and check processes in the background
+( sleep 10; start_scripts; while true; do
     sleep 10
+    if [ "$TERMINATING" -eq 1 ]; then break; fi
     check_processes
-done
+done ) &
+
+# Run HAProxy in foreground
+log "Starting HAProxy in foreground..."
+haproxy "${HAPROXY_OPTS[@]}" &
+HAPROXY_PID=$!
+log "HAProxy started with PID $HAPROXY_PID"
+
+wait $HAPROXY_PID
+HAPROXY_PID=""
+
+log "HAProxy has exited, stopping all scripts..."
+termination_handler

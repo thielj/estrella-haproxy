@@ -21,8 +21,6 @@ RUN set -eux; \
 USER haproxy
 WORKDIR ${_VAR_DIR}
 RUN mkdir ${_LOG_DIR} && \
-    touch ${_LOG_DIR}/haproxy.log && \
-    touch ${_LOG_DIR}/haproxy_error.log && \
     touch ${_LOG_DIR}/supervisord.log && \
     touch ${_LOG_DIR}/supervisord_error.log
 

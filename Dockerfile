@@ -18,6 +18,9 @@ RUN set -eux; \
         redis \
 	;
 
+COPY scripts/* "${_ETC_DIR}/scripts.d/"
+RUN chmod +x "${_ETC_DIR}/scripts.d/"*
+
 USER haproxy
 WORKDIR ${_VAR_DIR}
 RUN mkdir ${_LOG_DIR} && \

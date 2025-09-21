@@ -1,67 +1,67 @@
-#!/bin/sh
+#!/bin/bash
 
-# Example redis-master-watcher.sh script
-# This script monitors Redis masters and communicates with HAProxy through the admin socket
+# Redis master watcher script
+# Monitors Redis Sentinel for master changes and updates HAProxy backend
 
-CHECK_INTERVAL=${CHECK_INTERVAL:-10}
-REDIS_HOSTS=${REDIS_HOSTS:-"redis1:6379 redis2:6379 redis3:6379"}
-SOCAT_TOOL="/usr/local/bin/simple-socat.sh"
+#REDIS_PASSWORD=
+#REDIS_SENTINEL_GROUP=
+BACKEND="redis-master"
+SERVER="master"
 
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] redis-master-watcher: $1"
-}
+#SOCKET="${HAPROXY_SOCKET:-/var/lib/haproxy/haproxy.sock}"
+SOCKET_HOST="127.0.0.1"
+SOCKET_PORT="9999"
 
-check_redis_master() {
-    local host=$1
-    local port=$2
+# HAProxy can provide a healthy sentinel
+SENTINEL_HOST="127.0.0.1"
+SENTINEL_PORT="26379"
 
-    # Check if Redis is a master (simplified check using nc if available)
-    if command -v nc >/dev/null 2>&1; then
-        if timeout 3 sh -c "echo 'INFO replication' | nc $host $port" 2>/dev/null | grep -q "role:master"; then
-            return 0
-        else
-            return 1
-        fi
+# HAProxy provided replica
+DEFAULT_ADDR="127.0.0.1:16379"
+
+CURRENT_ADDR="$DEFAULT_ADDR"
+
+# Function to get master address from sentinel
+get_master_addr() {
+    local output
+    output=$(redis-cli -h "$SENTINEL_HOST" -p "$SENTINEL_PORT" \
+        -a "$REDIS_PASSWORD" \
+        --raw sentinel get-master-addr-by-name "$REDIS_SENTINEL_GROUP" 2>/dev/null)
+    if [ $? -eq 0 ] && [ -n "$output" ]; then
+        echo "$output" | tr '\n' ':' | sed 's/:$//'
     else
-        log "nc not available, skipping Redis check for $host:$port"
-        return 1
+        echo ""
     fi
 }
 
-update_haproxy_backend() {
-    local action=$1  # enable or disable
-    local server=$2
-
-    if [ -S "$HAPROXY_SOCKET" ]; then
-        if [ -x "$SOCAT_TOOL" ]; then
-            "$SOCAT_TOOL" "$action server redis-backend/$server" "$HAPROXY_SOCKET"
-            log "$action server $server in HAProxy backend"
-        else
-            log "Socket communication tool not available"
-        fi
+# Function to update HAProxy server address
+update_haproxy_server() {
+    local addr="$1"
+    echo "set server $BACKEND/$SERVER addr $addr" \
+        | nc -q1 "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
+    if [ $? -eq 0 ]; then
+        echo "Updated $BACKEND/$SERVER to $addr"
     else
-        log "HAProxy admin socket not available at $HAPROXY_SOCKET"
+        echo "Failed to update $BACKEND/$SERVER"
     fi
 }
 
-log "Starting Redis master watcher..."
-log "Monitoring Redis hosts: $REDIS_HOSTS"
-log "Check interval: ${CHECK_INTERVAL}s"
-
+# Main loop
 while true; do
-    for host_port in $REDIS_HOSTS; do
-        host=$(echo $host_port | cut -d: -f1)
-        port=$(echo $host_port | cut -d: -f2)
-        server_name="$host"
-
-        if check_redis_master "$host" "$port"; then
-            log "Redis $host:$port is master - enabling in HAProxy"
-            update_haproxy_backend "enable" "$server_name"
-        else
-            log "Redis $host:$port is not master - disabling in HAProxy"
-            update_haproxy_backend "disable" "$server_name"
+    master_addr=$(get_master_addr)
+    if [ -n "$master_addr" ]; then
+        if [ "$master_addr" != "$CURRENT_ADDR" ]; then
+            update_haproxy_server "$master_addr"
+            CURRENT_ADDR="$master_addr"
         fi
-    done
+    else
+        # No master found, set to default
+        if [ "$DEFAULT_ADDR" != "$CURRENT_ADDR" ]; then
+            update_haproxy_server "$DEFAULT_ADDR"
+            CURRENT_ADDR="$DEFAULT_ADDR"
+            echo "No master found, set to default $DEFAULT_ADDR"
+        fi
+    fi
 
-    sleep $CHECK_INTERVAL
+    sleep 10  # Check every 10 seconds
 done

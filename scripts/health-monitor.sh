@@ -1,49 +1,79 @@
-#!/bin/sh
+#!/bin/bash
 
-# Example health-monitor.sh script
-# This script monitors backend health and logs status through HAProxy admin socket
+# Health monitor script for HAProxy latency-based weight adjustment
+# Adjusts weights for servers in specified backends based on response time (rtime)
+# Favors servers with lower latency
 
-CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-30}
-SOCAT_TOOL="/usr/local/bin/simple-socat.sh"
+#SOCKET="${HAPROXY_SOCKET:-/var/lib/haproxy/haproxy.sock}"
+SOCKET_HOST="127.0.0.1"
+SOCKET_PORT="9999"
 
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] health-monitor: $1"
+# Function to get HAProxy stats
+get_stats() {
+    #echo "show stat" | socat unix-connect:"$SOCKET" stdio 2>/dev/null
+    echo "show stat" | nc -q1 "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
 }
 
-get_haproxy_stats() {
-    if [ -S "$HAPROXY_SOCKET" ] && [ -x "$SOCAT_TOOL" ]; then
-        "$SOCAT_TOOL" "show stat" "$HAPROXY_SOCKET" 2>/dev/null
+# Function to set server weight
+set_weight() {
+    local backend="$1"
+    local server="$2"
+    local weight="$3"
+    #echo "set weight $backend/$server $weight" | socat unix-connect:"$SOCKET" stdio 2>/dev/null
+    echo "set weight $backend/$server $weight" | nc -q1 "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
+}
+
+# Function to adjust weights for a backend
+adjust_weights() {
+    local backend="$1"
+    local srv_pattern="$2"
+
+    # Get stats and filter for the backend and servers matching pattern, status UP
+    local stats
+    stats=$(get_stats | awk -F',' '$1 == "'$backend'" && $2 ~ /^'$srv_pattern'[0-9]+$/ && $18 == "UP" {print $2","$60}')
+
+    # Parse servers
+    local servers=()
+    while IFS=',' read -r svname rtime; do
+        servers+=("$svname:$rtime")
+    done <<< "$stats"
+
+    # Sort by rtime (latency), ascending
+    mapfile -t sorted < <(printf '%s\n' "${servers[@]}" | sort -t: -k2 -n)
+
+    local num_servers=${#sorted[@]}
+    if [ "$num_servers" -eq 0 ]; then
+        echo "No UP servers for $backend matching $srv_pattern"
+        return
     fi
+
+    # Assign weights: strongly favor lower latency
+    local base_weight=256
+    local div=16 # 256, 16, 1, 0, 0, ...
+    for i in "${!sorted[@]}"; do
+        local server="${sorted[$i]%%:*}"
+        local weight=$base_weight
+        base_weight=$(( (base_weight + div / 2) / div )) # half-up rounding
+        set_weight "$backend" "$server" "$weight"
+        echo "Set $backend/$server weight to $weight"
+    done
 }
 
-monitor_backends() {
-    local stats=$(get_haproxy_stats)
-
-    if [ -n "$stats" ]; then
-        # Parse backend status (simplified)
-        echo "$stats" | grep -v "^#" | while IFS=',' read -r pxname svname qcur qmax scur smax slim stot bin bout dreq dresp ereq econ eresp wretr wredis status weight act bck chkfail chkdown lastchg downtime qlimit pid iid sid throttle lbtot tracked type rate rate_lim rate_max check_status check_code check_duration hrsp_1xx hrsp_2xx hrsp_3xx hrsp_4xx hrsp_5xx hrsp_other hanafail req_rate req_rate_max req_tot cli_abrt srv_abrt comp_in comp_out comp_byp comp_rsp lastsess last_chk last_agt qtime ctime rtime ttime agent_status agent_code agent_duration check_desc agent_desc check_rise check_fall check_health agent_rise agent_fall agent_health addr cookie mode algo conn_rate conn_rate_max conn_tot intercepted dcon dses wrew connect reuse cache_lookups cache_hits srv_icur src_ilim; do
-            if [ "$svname" != "BACKEND" ] && [ "$svname" != "FRONTEND" ] && [ -n "$status" ]; then
-                case "$status" in
-                    "UP"|"OPEN")
-                        ;;
-                    "DOWN"|"MAINT")
-                        log "Backend $pxname/$svname is $status"
-                        ;;
-                    *)
-                        log "Backend $pxname/$svname status: $status"
-                        ;;
-                esac
-            fi
-        done
-    else
-        log "Could not retrieve HAProxy stats"
-    fi
-}
-
-log "Starting health monitor..."
-log "Check interval: ${CHECK_INTERVAL}s"
-
+# Main loop
 while true; do
-    monitor_backends
-    sleep $CHECK_INTERVAL
+    # Process each LATENCY_PROXY_SET
+    i=0
+    while true; do
+        backend_var="LATENCY_PROXY_SET$i"
+        srv_var="LATENCY_PROXY_SRV$i"
+        backend="${!backend_var}"
+        srv_pattern="${!srv_var}"
+        if [ -z "$backend" ] || [ -z "$srv_pattern" ]; then
+            break
+        fi
+        adjust_weights "$backend" "$srv_pattern"
+        i=$((i + 1))
+    done
+
+    sleep 60  # Adjust every minute
 done

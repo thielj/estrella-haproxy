@@ -1,7 +1,9 @@
 #!/bin/sh
 
 # Simple socat replacement for HAProxy admin socket communication
-# Usage: ./simple-socat.sh "command" /path/to/socket
+# Usage: socat.sh "command" /path/to/socket
+# Alternatively, create the admin socket as e.g. `ipv4@127.0.0.1:9999`
+# and use `nc` instead of this script.
 
 if [ $# -ne 2 ]; then
     echo "Usage: $0 \"command\" /path/to/socket"

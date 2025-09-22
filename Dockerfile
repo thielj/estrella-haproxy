@@ -5,6 +5,8 @@ ENV _VAR_DIR="/var/lib/haproxy" \
 ENV _LOG_DIR="${_VAR_DIR}/logs" \
     HAPROXY_SOCKET="${_VAR_DIR}/haproxy.sock" \
     HAPROXY_MASTR_SOCKET="${_VAR_DIR}/master.sock"
+
+VOLUME "${_VAR_DIR}" "${_ETC_DIR}"
     
 USER root
 COPY bin/* /usr/local/bin/
@@ -18,8 +20,8 @@ RUN set -eux; \
         redis \
 	;
 
-COPY scripts/* "${_ETC_DIR}/scripts.d/"
-RUN chmod +x "${_ETC_DIR}/scripts.d/"*
+#COPY scripts/* "${_ETC_DIR}/scripts.d/"
+#RUN chmod +x "${_ETC_DIR}/scripts.d/"*
 
 USER haproxy
 WORKDIR ${_VAR_DIR}

@@ -63,6 +63,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Generate SBOM
+        if: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.push == 'true' }}
         uses: anchore/sbom-action@v0
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
@@ -70,7 +71,15 @@ jobs:
           output-file: sbom.spdx.json
 
       - name: Upload SBOM
+        if: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.push == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: sbom
           path: sbom.spdx.json
+
+      - name: Post-run summary
+        if: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.push == 'true' }}
+        run: |
+          echo "✅ Docker image was pushed to ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}"
+          echo "📦 SBOM generated: sbom.spdx.json"
+          echo "📤 SBOM uploaded as artifact: 'sbom'"

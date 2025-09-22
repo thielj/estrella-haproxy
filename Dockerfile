@@ -24,7 +24,6 @@ RUN chmod +x "${_ETC_DIR}/scripts.d/"*
 
 USER haproxy
 WORKDIR ${_VAR_DIR}
-RUN mkdir -p ${_LOG_DIR} 
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["haproxy", "-f", "/usr/local/etc/haproxy/haproxy.cfg", "-f", "/usr/local/etc/haproxy/services.d"]

@@ -10,6 +10,7 @@ PROCESS_PIDS=""
 TERMINATING=0
 HAPROXY_PID=""
 
+mkdir -p "$_LOG_DIR"
 touch "$_LOG_DIR/supervisord.log"
 
 log() {

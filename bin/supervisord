@@ -10,6 +10,8 @@ PROCESS_PIDS=""
 TERMINATING=0
 HAPROXY_PID=""
 
+touch "$_LOG_DIR/supervisord.log"
+
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] supervisord: $1" | tee -a "$_LOG_DIR/supervisord.log"
 }
@@ -23,6 +25,7 @@ start_scripts() {
             if [ -x "$script" ]; then
                 script_name=$(basename "$script" .sh)
                 log "Starting script: $script_name"
+                touch "$_LOG_DIR/${script_name}.log" "$_LOG_DIR/${script_name}_error.log"
                 "$script" > "$_LOG_DIR/${script_name}.log" 2> "$_LOG_DIR/${script_name}_error.log" &
                 script_pid=$!
                 PROCESS_PIDS="$PROCESS_PIDS $script_pid"

@@ -2,7 +2,7 @@ FROM haproxy:2.8-alpine
 
 ENV _VAR_DIR="/var/lib/haproxy" \
     _ETC_DIR="/usr/local/etc/haproxy"
-ENV _LOG_DIR="${_VAR_DIR}/log" \
+ENV _LOG_DIR="${_VAR_DIR}/logs" \
     HAPROXY_SOCKET="${_VAR_DIR}/haproxy.sock" \
     HAPROXY_MASTR_SOCKET="${_VAR_DIR}/master.sock"
     
@@ -24,13 +24,7 @@ RUN chmod +x "${_ETC_DIR}/scripts.d/"*
 
 USER haproxy
 WORKDIR ${_VAR_DIR}
-RUN mkdir ${_LOG_DIR} && \
-    touch ${_LOG_DIR}/supervisord.log && \
-    touch ${_LOG_DIR}/supervisord_error.log
+RUN mkdir -p ${_LOG_DIR} 
 
-## Expose HAProxy ports
-#EXPOSE 8404
-
-# Use our custom entrypoint
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["supervisord", "-f", "/usr/local/etc/haproxy/haproxy.cfg", "-f", "/usr/local/etc/haproxy/services.d"]
+CMD ["haproxy", "-f", "/usr/local/etc/haproxy/haproxy.cfg", "-f", "/usr/local/etc/haproxy/services.d"]

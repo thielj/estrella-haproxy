@@ -15,7 +15,6 @@ RUN set -eux; \
     apk add --no-cache \
         bash \
         curl \
-		socat \
         redis \
 	;
 

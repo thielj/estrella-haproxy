@@ -5,13 +5,13 @@
 # Favors servers with lower latency
 
 SOCKET="${HAPROXY_SOCKET:-/var/lib/haproxy/haproxy.sock}"
-#SOCKET_HOST="127.0.0.1"
-#SOCKET_PORT="9999"
+SOCKET_HOST="127.0.0.1"
+SOCKET_PORT="9999"
 
 # Function to get HAProxy stats
 get_stats() {
-    echo "show stat" | socat unix-connect:"$SOCKET" stdio 2>/dev/null
-    #echo "show stat" | nc -q1 "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
+    #echo "show stat" | socat unix-connect:"$SOCKET" stdio 2>/dev/null
+    echo "show stat" | nc "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
 }
 
 # Function to set server weight
@@ -19,9 +19,9 @@ set_weight() {
     local backend="$1"
     local server="$2"
     local weight="$3"
-    echo "set weight $backend/$server $weight"
-    echo "set weight $backend/$server $weight" | socat unix-connect:"$SOCKET" stdio 2>/dev/null
-    #echo "set weight $backend/$server $weight" | nc -q1 "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
+    #echo "set weight $backend/$server $weight"
+    #echo "set weight $backend/$server $weight" | socat unix-connect:"$SOCKET" stdio 2>/dev/null
+    echo "set weight $backend/$server $weight" | nc "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
 }
 
 # Function to adjust weights for a backend
@@ -29,7 +29,7 @@ adjust_weights() {
     local backend="$1"
     local srv_pattern="$2"
 
-    echo "Adjusting weights for $backend/$srv_pattern set"
+    #echo "Adjusting weights for $backend/$srv_pattern set"
 
     # Get stats and filter for the backend and servers matching srv_pattern, status UP
     local stats
@@ -58,7 +58,7 @@ adjust_weights() {
         local weight=$base_weight
         base_weight=$(( (base_weight + div / 2) / div )) # half-up rounding
         set_weight "$backend" "$server" "$weight"
-        echo "Set $backend/$server weight to $weight"
+        #echo "Set $backend/$server weight to $weight"
     done
 }
 

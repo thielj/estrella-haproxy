@@ -8,9 +8,9 @@
 #REDIS_MASTER_BACKEND_SET=
 #REDIS_MASTER_BACKEND_SRV=
 
-SOCKET="${HAPROXY_SOCKET:-/var/lib/haproxy/haproxy.sock}"
-#SOCKET_HOST="127.0.0.1"
-#SOCKET_PORT="9999"
+#SOCKET="${HAPROXY_SOCKET:-/var/lib/haproxy/haproxy.sock}"
+SOCKET_HOST="127.0.0.1"
+SOCKET_PORT="9999"
 
 # HAProxy can provide a healthy sentinel
 SENTINEL_HOST="127.0.0.1"
@@ -37,11 +37,10 @@ get_master_addr() {
 # Function to update HAProxy server address
 update_haproxy_server() {
     IFS=: read -r host port <<< "$1"
-    echo "set server $REDIS_MASTER_BACKEND_SET/$REDIS_MASTER_BACKEND_SRV addr $host port $port"
-    #echo "set server $REDIS_MASTER_BACKEND_SET/$REDIS_MASTER_BACKEND_SRV addr $host port $port" \
-    #    | nc -q1 "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
+    #echo "set server $REDIS_MASTER_BACKEND_SET/$REDIS_MASTER_BACKEND_SRV addr $host port $port"
     echo "set server $REDIS_MASTER_BACKEND_SET/$REDIS_MASTER_BACKEND_SRV addr $host port $port" \
-        | socat unix-connect:"$SOCKET" stdio 2>/dev/null
+        | nc "$SOCKET_HOST" "$SOCKET_PORT" 2>/dev/null
+    #    | socat unix-connect:"$SOCKET" stdio 2>/dev/null
     if [ $? -eq 0 ]; then
         echo "Updated $REDIS_MASTER_BACKEND_SET/$REDIS_MASTER_BACKEND_SRV to $host:$port"
     else
@@ -51,6 +50,9 @@ update_haproxy_server() {
 
 # Main loop
 while true; do
+
+    sleep 10  # Check every 10 seconds
+
     master_addr=$(get_master_addr)
     if [ -n "$master_addr" ]; then
         if [ "$master_addr" != "$CURRENT_ADDR" ]; then
@@ -66,5 +68,4 @@ while true; do
         fi
     fi
 
-    sleep 10  # Check every 10 seconds
 done

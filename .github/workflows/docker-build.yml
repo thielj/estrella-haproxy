@@ -51,6 +51,11 @@ jobs:
             type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ github.ref_name }}
+            type=semver,pattern=latest
+
+      - name: Debug metadata tags
+        run: echo "Tags generated: ${{ steps.meta.outputs.tags }}"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
